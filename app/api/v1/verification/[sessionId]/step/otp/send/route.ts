@@ -41,8 +41,14 @@ export async function POST(req: NextRequest, { params }: { params: { sessionId: 
   const result = await sendOTPEmail(sessionId, email.toLowerCase().trim());
 
   if (!result.sent) {
+    const detail = result.error ?? 'EMAIL_SEND_FAILED';
+    log.error('otp_send_failed', { sessionId, detail });
     return NextResponse.json(
-      { error: 'email_failed', message: "Échec de l'envoi de l'email. Réessayez." },
+      {
+        error: 'email_failed',
+        message: "Échec de l'envoi de l'email. Réessayez.",
+        detail,                                    // visible in response for debugging
+      },
       { status: 500 }
     );
   }

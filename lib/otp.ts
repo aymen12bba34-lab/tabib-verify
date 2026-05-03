@@ -161,7 +161,12 @@ export async function sendOTPEmail(
       console.log(`[OTP] Sent via Resend to ${email} (session ${sessionId})`);
       return { sent: true };
     } catch (err) {
-      console.error('[OTP] Resend failed, trying SMTP fallback:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[OTP] Resend failed:', msg);
+      // If no SMTP fallback configured, surface the Resend error directly
+      if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        return { sent: false, error: `RESEND_ERROR: ${msg}` };
+      }
     }
   }
 
