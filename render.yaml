@@ -1,35 +1,66 @@
+# render.yaml — TabibVerify DZ
+# Deploys the full stack to Render.com (free tier)
+#
+# Usage:
+#   1. Push this file to GitHub
+#   2. Go to https://dashboard.render.com → New → Blueprint
+#   3. Connect your GitHub repo — Render auto-reads this file
+#   4. Fill in the "sync: false" env vars in the Render dashboard
+#   5. Deploy — Render creates the PostgreSQL DB + web service automatically
+
+databases:
+  - name: tabibverify-db
+    databaseName: tabibverify
+    user: tabib
+    plan: free           # Free tier: 256 MB RAM, 1 GB storage (suspends after 90 days inactive)
+    region: frankfurt    # Closest to Algeria
+
 services:
   - type: web
-    name: tabib-verify
+    name: tabibverify
     env: node
-    plan: free
+    plan: free           # Free tier: 512 MB RAM, spins down after 15 min inactivity
+    region: frankfurt
     buildCommand: npm install && npm run build
-    startCommand: npm run start
+    startCommand: npm start
+    healthCheckPath: /
+
     envVars:
-      # Database
+      # ── Database ──────────────────────────────────────────────────────────
       - key: DATABASE_URL
+        fromDatabase:
+          name: tabibverify-db
+          property: connectionString
+        # Render automatically injects the internal connection string with SSL
+
+      # ── Redis (Upstash free — https://upstash.com) ────────────────────────
+      # Leave empty to use the built-in in-memory fallback for testing.
+      # For production, create a free Upstash Redis and paste the values below.
+      - key: UPSTASH_REDIS_REST_URL
         sync: false
-      
-      # SMTP Configuration (Nodemailer)
-      - key: SMTP_HOST
-        value: smtp.gmail.com
-      - key: SMTP_PORT
-        value: "465"
-      - key: SMTP_SECURE
-        value: "true"
-      - key: SMTP_USER
-        sync: false
-      - key: SMTP_PASS
+      - key: UPSTASH_REDIS_REST_TOKEN
         sync: false
 
-      # AI Services
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: GROQ_API_KEY
-        sync: false
+      # ── Email OTP (Resend — https://resend.com, 3000 emails/month free) ──
+      - key: RESEND_API_KEY
+        sync: false       # Paste your re_xxxxxxxxxxxx key in the Render dashboard
 
-      # App Configuration
+      # ── Security ──────────────────────────────────────────────────────────
+      - key: WEBHOOK_SECRET
+        generateValue: true   # Render auto-generates a secure random value
+
+      - key: API_KEY_SALT
+        generateValue: true
+
+      - key: ADMIN_SECRET
+        sync: false       # Set a strong password for the admin dashboard
+
+      - key: CRON_SECRET
+        generateValue: true
+
+      # ── App ───────────────────────────────────────────────────────────────
       - key: NODE_ENV
         value: production
+
       - key: NEXT_PUBLIC_APP_URL
-        sync: false
+        sync: false       # Set to your Render URL, e.g. https://tabibverify.onrender.com
