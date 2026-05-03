@@ -14,7 +14,9 @@ services:
     env: node
     plan: free           # Free tier: 512 MB RAM
     region: frankfurt
-    buildCommand: npm install && npm run build
+    # --include=dev is required: tailwindcss/postcss are devDependencies
+    # but needed at build time for Next.js CSS compilation
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /
 
@@ -25,17 +27,17 @@ services:
           name: tabibverify-db
           property: connectionString
 
-      # ── Redis (Upstash) ───────────────────────────────────────────────────
+      # ── Redis (Upstash — optional, in-memory fallback if blank) ───────────
       - key: UPSTASH_REDIS_REST_URL
         sync: false
       - key: UPSTASH_REDIS_REST_TOKEN
         sync: false
 
-      # ── Email OTP (Resend — primary) ──────────────────────────────────────
+      # ── Email OTP — Resend (primary, 3000 emails/month free) ─────────────
       - key: RESEND_API_KEY
         sync: false       # paste re_ftYhdREp... from resend.com
 
-      # ── Email OTP (Nodemailer SMTP — optional fallback) ───────────────────
+      # ── Email OTP — Gmail SMTP (fallback if Resend key not set) ──────────
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT
@@ -43,9 +45,9 @@ services:
       - key: SMTP_SECURE
         value: "true"
       - key: SMTP_USER
-        sync: false
+        sync: false       # your Gmail address e.g. tabibverify@gmail.com
       - key: SMTP_PASS
-        sync: false
+        sync: false       # Gmail App Password (not your login password)
 
       # ── AI Services ───────────────────────────────────────────────────────
       - key: GEMINI_API_KEY

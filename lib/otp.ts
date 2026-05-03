@@ -1,19 +1,8 @@
 import crypto from 'crypto';
-import nodemailer from 'nodemailer';
 import redis from './redis';
 
 const OTP_EXPIRY = 300; // 5 minutes
 const MAX_ATTEMPTS = 3;
-
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '465', 10),
-  secure: process.env.SMTP_SECURE !== 'false', // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
 
 export function generateOTP(): string {
   return crypto.randomInt(100000, 999999).toString();
@@ -70,44 +59,21 @@ export async function verifyOTP(
   return { valid: true };
 }
 
-export async function sendOTPEmail(
-  sessionId: string,
-  email: string
-): Promise<{ sent: boolean; error?: string }> {
-  const otp = generateOTP();
-  await storeOTP(sessionId, email, otp);
-
-  // Dev mode fallback
-  if (!process.env.SMTP_USER || process.env.SMTP_USER === '') {
-    console.log(`\n┌─ [DEV OTP - NODEMAILER] ────┐`);
-    console.log(`│  Session : ${sessionId}  │`);
-    console.log(`│  Email   : ${email.padEnd(20)} │`);
-    console.log(`│  Code    : ${otp}                │`);
-    console.log(`└─────────────────────────────┘\n`);
-    return { sent: true };
-  }
-
-  try {
-    await transporter.sendMail({
-      from: `"TabibVerify DZ" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: `${otp} — Votre code de vérification TabibVerify`,
-      html: `
-<!DOCTYPE html>
+// ─── HTML email template ──────────────────────────────────────────────────────
+function buildEmailHtml(otp: string): string {
+  return `<!DOCTYPE html>
 <html lang="fr">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:Arial,sans-serif">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:40px 0">
     <tr><td align="center">
       <table width="500" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
-        <!-- Header -->
         <tr>
           <td style="background:#1B6CA8;padding:24px 32px">
             <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700">TabibVerify DZ</h1>
             <p style="margin:4px 0 0;color:#93c5fd;font-size:13px">Vérification des médecins algériens</p>
           </td>
         </tr>
-        <!-- Body -->
         <tr>
           <td style="padding:32px">
             <p style="margin:0 0 16px;color:#374151;font-size:15px">Votre code de vérification :</p>
@@ -122,7 +88,6 @@ export async function sendOTPEmail(
             </p>
           </td>
         </tr>
-        <!-- Footer -->
         <tr>
           <td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb">
             <p style="margin:0;color:#9ca3af;font-size:11px">
@@ -134,12 +99,95 @@ export async function sendOTPEmail(
     </td></tr>
   </table>
 </body>
-</html>`,
-    });
+</html>`;
+}
 
-    return { sent: true };
-  } catch (err) {
-    console.error('[Nodemailer] Exception:', err);
-    return { sent: false, error: 'EMAIL_SEND_FAILED' };
+// ─── Resend sender ────────────────────────────────────────────────────────────
+async function sendViaResend(email: string, otp: string): Promise<void> {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'TabibVerify DZ <onboarding@resend.dev>',
+      to: [email],
+      subject: `${otp} — Votre code de vérification TabibVerify`,
+      html: buildEmailHtml(otp),
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Resend API error ${res.status}: ${body}`);
   }
+}
+
+// ─── Nodemailer SMTP sender ───────────────────────────────────────────────────
+async function sendViaSmtp(email: string, otp: string): Promise<void> {
+  // Lazy import so the module doesn't fail to load when nodemailer isn't installed
+  const nodemailer = await import('nodemailer');
+  const transporter = nodemailer.default.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT || '465', 10),
+    secure: process.env.SMTP_SECURE !== 'false',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  await transporter.sendMail({
+    from: `"TabibVerify DZ" <${process.env.SMTP_USER}>`,
+    to: email,
+    subject: `${otp} — Votre code de vérification TabibVerify`,
+    html: buildEmailHtml(otp),
+  });
+}
+
+// ─── Public entry point ───────────────────────────────────────────────────────
+export async function sendOTPEmail(
+  sessionId: string,
+  email: string
+): Promise<{ sent: boolean; error?: string }> {
+  const otp = generateOTP();
+  await storeOTP(sessionId, email, otp);
+
+  // 1️⃣  Resend (primary — free 3 000 emails/month, no SMTP config needed)
+  if (process.env.RESEND_API_KEY) {
+    try {
+      await sendViaResend(email, otp);
+      console.log(`[OTP] Sent via Resend to ${email} (session ${sessionId})`);
+      return { sent: true };
+    } catch (err) {
+      console.error('[OTP] Resend failed, trying SMTP fallback:', err);
+    }
+  }
+
+  // 2️⃣  Nodemailer SMTP (fallback — requires SMTP_USER + SMTP_PASS)
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    try {
+      await sendViaSmtp(email, otp);
+      console.log(`[OTP] Sent via SMTP to ${email} (session ${sessionId})`);
+      return { sent: true };
+    } catch (err) {
+      console.error('[OTP] SMTP failed:', err);
+      return { sent: false, error: 'EMAIL_SEND_FAILED' };
+    }
+  }
+
+  // 3️⃣  Dev console fallback — logs OTP locally, never use in production
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`\n┌─ [DEV OTP] ──────────────────────────┐`);
+    console.log(`│  Session : ${sessionId.padEnd(26)} │`);
+    console.log(`│  Email   : ${email.padEnd(26)} │`);
+    console.log(`│  Code    : ${otp.padEnd(26)} │`);
+    console.log(`└──────────────────────────────────────┘\n`);
+    return { sent: true };
+  }
+
+  // Production with no email config at all → hard error
+  console.error('[OTP] No email provider configured (RESEND_API_KEY, SMTP_USER/SMTP_PASS missing)');
+  return { sent: false, error: 'NO_EMAIL_PROVIDER' };
 }
