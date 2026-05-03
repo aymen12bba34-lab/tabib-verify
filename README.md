@@ -53,6 +53,36 @@ sequenceDiagram
 
 ---
 
+## ☁️ Deployment Architecture (Render)
+
+This application is configured for deployment on **Render.com**. The `render.yaml` file defines the infrastructure as code for seamless cloud hosting.
+
+```mermaid
+graph TD
+    Client([💻 Doctor / User]) <--> |HTTPS| RenderWeb
+    
+    subgraph Render.com Cloud
+        RenderWeb[🌐 Web Service<br/>TabibVerify Next.js]
+    end
+    
+    subgraph External Services
+        Supabase[(🐘 Supabase<br/>PostgreSQL DB)]
+        Gemini[🧠 Google Gemini<br/>Vision AI / Scraping]
+        SMTP[📧 Gmail SMTP<br/>Nodemailer]
+    end
+
+    RenderWeb <--> |Prisma / pg| Supabase
+    RenderWeb <--> |REST API| Gemini
+    RenderWeb --> |SMTP / 465| SMTP
+```
+
+To deploy on Render:
+1. Connect your GitHub repository to Render.
+2. Select **Blueprint** and point it to the `render.yaml` file in this repository.
+3. Fill in the required secret environment variables (`DATABASE_URL`, `SMTP_USER`, `SMTP_PASS`, `GEMINI_API_KEY`) when prompted in the Render Dashboard.
+
+---
+
 ## 🚀 Key Features
 
 1. **AI-Powered Web Scraping (Gemini 1.5 Pro):** 
