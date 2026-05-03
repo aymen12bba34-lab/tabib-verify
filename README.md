@@ -1,36 +1,106 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🩺 TabibVerify DZ
 
-## Getting Started
+TabibVerify is a state-of-the-art, secure identity verification pipeline built specifically for Algerian medical practitioners. It utilizes an AI-driven, 3-step authentication flow to cross-reference National Identity Cards with the official CNOM (Conseil National de l'Ordre des Médecins) registry.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 🏗️ Architecture Diagram
+
+Here is the high-level architecture of the 3-step verification pipeline:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Doctor
+    participant UI as TabibVerify Frontend
+    participant API as Verification API (Next.js)
+    participant DB as PostgreSQL (Supabase)
+    participant AI as Gemini 1.5 Pro (Vision)
+    participant Email as Nodemailer (SMTP)
+
+    Note over Doctor,Email: STEP 1: Identity & Web Registry Scraping
+    Doctor->>UI: Enters CNOM Number & NIN
+    UI->>API: POST /step/identity
+    API->>AI: Fetch & Scrape CNOM HTML Registry
+    AI-->>API: Extracted JSON (NIN, Name, Specialty, Status)
+    API->>DB: Store extracted NIN (for later cross-check)
+    API-->>UI: CNOM Verified
+
+    Note over Doctor,Email: STEP 2: Email OTP Authentication
+    Doctor->>UI: Enters Professional Email
+    UI->>API: POST /step/otp/send
+    API->>DB: Store Hash & Expiration
+    API->>Email: Send secure 6-digit OTP
+    Email-->>Doctor: Receives OTP
+    Doctor->>UI: Submits OTP
+    UI->>API: POST /step/otp/verify
+    API->>DB: Validate Hash
+    API-->>UI: OTP Verified
+
+    Note over Doctor,Email: STEP 3 & 4: Vision AI & Cross-Verification
+    Doctor->>UI: Uploads National ID Card (Image)
+    UI->>API: POST /step/ocr
+    API->>AI: Process Image (Base64)
+    AI-->>API: JSON (NIN, Full Name, DOB)
+    API->>API: CROSS-VERIFICATION (Compare OCR NIN == Scraped NIN)
+    alt NIN Matches
+        API->>DB: UPDATE status = 'VERIFIED'
+        API-->>UI: Identity successfully verified.
+    else NIN Mismatch
+        API-->>UI: 400 Bad Request: Identity Verification Failed: NIN Mismatch
+    end
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🚀 Key Features
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **AI-Powered Web Scraping (Gemini 1.5 Pro):** 
+   - Dynamically scrapes practitioner details directly from the public HTML registry.
+   - Strictly enforces JSON extraction for high accuracy and consistency.
 
-## Learn More
+2. **Universal SMTP OTP Delivery (Nodemailer):**
+   - Bypasses sandbox limits by utilizing direct SMTP (e.g., Gmail App Passwords).
+   - Generates and stores secure, cryptographically random OTPs in PostgreSQL/Redis.
 
-To learn more about Next.js, take a look at the following resources:
+3. **Vision AI Document Processing (Gemini Vision):**
+   - No clunky client-side OCR.
+   - Extracts National Identification Numbers (NIN), Full Names, and Dates of Birth from physical ID cards seamlessly.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+4. **Strict Cross-Verification (Step 4):**
+   - The backend guarantees that the NIN printed on the ID card exactly matches the NIN extracted from the official registry.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## ⚙️ Environment Variables
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+To run this project locally, you must provide the following variables in your `.env.local`:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```env
+# PostgreSQL Database
+DATABASE_URL=postgresql://user:password@localhost:5432/tabibverify
+
+# Email OTP (Nodemailer - Example with Gmail)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_app_password
+
+# AI & OCR (Gemini)
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+## 💻 Getting Started
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Run the development server:
+   ```bash
+   npm run dev
+   ```
+
+3. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
