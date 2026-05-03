@@ -63,8 +63,9 @@ export function getRateLimitInfo(key: string, max: number): {
 /**
  * Standard 429 JSON response for rate-limited requests.
  */
+import { NextResponse } from 'next/server';
+
 export function rateLimitResponse() {
-  const { NextResponse } = require('next/server');
   return NextResponse.json(
     {
       error: 'RATE_LIMITED',

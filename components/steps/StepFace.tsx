@@ -210,7 +210,7 @@ export default function StepFace({ sessionId, doctorName, onComplete }: StepFace
     }
 
     let detections = 0;
-    let blinks = 0;
+    let _blinks = 0;
     let lastEAR = 1;
 
     for (let i = 0; i < 30; i++) {
@@ -224,7 +224,7 @@ export default function StepFace({ sessionId, doctorName, onComplete }: StepFace
           const leftEye  = result.landmarks.getLeftEye();
           const rightEye = result.landmarks.getRightEye();
           const ear = (getEAR(leftEye) + getEAR(rightEye)) / 2;
-          if (lastEAR > 0.25 && ear < 0.2) blinks++;
+          if (lastEAR > 0.25 && ear < 0.2) _blinks++;
           lastEAR = ear;
         }
       } catch { /* frame error — skip */ }
