@@ -31,7 +31,11 @@ services:
       - key: UPSTASH_REDIS_REST_TOKEN
         sync: false
 
-      # ── Email OTP (Nodemailer via SMTP) ───────────────────────────────────
+      # ── Email OTP (Resend — primary) ──────────────────────────────────────
+      - key: RESEND_API_KEY
+        sync: false       # paste re_ftYhdREp... from resend.com
+
+      # ── Email OTP (Nodemailer SMTP — optional fallback) ───────────────────
       - key: SMTP_HOST
         value: smtp.gmail.com
       - key: SMTP_PORT
@@ -43,7 +47,7 @@ services:
       - key: SMTP_PASS
         sync: false
 
-      # ── AI Services (Gemini Vision) ───────────────────────────────────────
+      # ── AI Services ───────────────────────────────────────────────────────
       - key: GEMINI_API_KEY
         sync: false
       - key: GROQ_API_KEY
@@ -67,4 +71,4 @@ services:
         value: production
 
       - key: NEXT_PUBLIC_APP_URL
-        sync: false
+        sync: false       # set to https://tabibverify.onrender.com after first deploy
