@@ -39,3 +39,10 @@ next-env.d.ts
 .env.local
 
 .vercel
+
+# Local dev-tool config (contains API tokens — never commit)
+.mcp.json
+.agents/
+.qwen/
+.claude/skills/
+skills-lock.json
